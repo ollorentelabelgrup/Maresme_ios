@@ -9,9 +9,12 @@ import SwiftUI
 
 @main
 struct MaresmeApp: App {
+    @State private var session = SessionManager()
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            AppRootView()
+                .environment(session)
         }
     }
 }
