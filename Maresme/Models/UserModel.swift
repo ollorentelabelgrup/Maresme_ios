@@ -14,11 +14,8 @@ struct UserModel: Decodable, Identifiable {
 
     var isProfessional: Bool { role == "professional" || role == "agency" }
 
-    // keyDecodingStrategy = .convertFromSnakeCase handles snake_case automatically.
-    // Custom CodingKeys only needed for fields that don't follow the pattern.
-    enum CodingKeys: String, CodingKey {
-        case id, ulid, name, email, phone, avatar, bio, role
-        case emailVerified = "email_verified"
-        case createdAt     = "created_at"
-    }
+    // No CodingKeys needed: keyDecodingStrategy = .convertFromSnakeCase in APIClient
+    // automatically converts "email_verified" → emailVerified, "created_at" → createdAt, etc.
+    // Adding explicit CodingKeys with snake_case raw values breaks the lookup because the
+    // decoder converts JSON keys FIRST and then matches against CodingKey raw values.
 }

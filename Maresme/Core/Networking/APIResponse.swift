@@ -18,17 +18,10 @@ struct PaginationLinks: Decodable {
 }
 
 struct PaginationMeta: Decodable {
-    let path: String
-    let perPage: Int
-    let nextCursor: String?
-    let prevCursor: String?
-
-    enum CodingKeys: String, CodingKey {
-        case path
-        case perPage    = "per_page"
-        case nextCursor = "next_cursor"
-        case prevCursor = "prev_cursor"
-    }
+    let path:       String
+    let perPage:    Int       // JSON: "per_page" → convertFromSnakeCase → perPage ✓
+    let nextCursor: String?   // JSON: "next_cursor" → nextCursor ✓
+    let prevCursor: String?   // JSON: "prev_cursor" → prevCursor ✓
 }
 
 // Explicit nonisolated init(from:) is required because SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor
