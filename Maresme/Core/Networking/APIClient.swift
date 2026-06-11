@@ -75,6 +75,30 @@ actor APIClient {
         try validate(response: response, data: data)
     }
 
+    // MARK: - Multipart upload (for photo uploads)
+
+    func uploadMultipart<T: Decodable>(_ path: String, boundary: String, body: Data) async throws -> T {
+        guard let url = URLComponents(
+            url: Config.apiBaseURL.appendingPathComponent(path),
+            resolvingAgainstBaseURL: false
+        )?.url else {
+            throw APIError.unknown
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        if let token = tokenProvider() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        request.httpBody = body
+
+        let (data, response) = try await performRequest(request)
+        try validate(response: response, data: data)
+        return try decode(T.self, from: data)
+    }
+
     // MARK: - Build
 
     private func buildRequest(_ endpoint: Endpoint) throws -> URLRequest {

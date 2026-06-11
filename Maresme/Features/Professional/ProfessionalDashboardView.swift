@@ -150,17 +150,37 @@ struct ProfessionalDashboardView: View {
             NavigationLink {
                 MyPropertiesView()
             } label: {
-                Label("Propiedades", systemImage: "house.and.flag")
+                HStack {
+                    Label("Propiedades", systemImage: "house.and.flag")
+                    Spacer()
+                    if let count = vm.stats?.activeProperties, count > 0 {
+                        Text("\(count) activas")
+                            .font(.maresmeCaption)
+                            .foregroundStyle(Color.maresmeSubtext)
+                    }
+                }
             }
             NavigationLink {
                 LeadsView()
             } label: {
-                Label("Leads", systemImage: "person.badge.clock")
+                HStack {
+                    Label("Leads", systemImage: "person.badge.clock")
+                    Spacer()
+                    if let count = vm.stats?.newLeads, count > 0 {
+                        Text("\(count) nuevos")
+                            .font(.maresmeLabelSm)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Color.maresmeBlue)
+                            .clipShape(Capsule())
+                    }
+                }
             }
             NavigationLink {
                 ActivityView()
             } label: {
-                Label("Actividad", systemImage: "clock.arrow.circlepath")
+                Label("Actividad reciente", systemImage: "clock.arrow.circlepath")
             }
             NavigationLink {
                 TeamView()

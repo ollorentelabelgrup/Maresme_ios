@@ -58,6 +58,8 @@ struct ActivityRowView: View {
         case "purple": return Color.purple
         case "blue":   return .maresmeBlue
         case "indigo": return Color.indigo
+        case "teal":   return Color.teal
+        case "red":    return .maresmeError
         default:       return .maresmeSubtext
         }
     }

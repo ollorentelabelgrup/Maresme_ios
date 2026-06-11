@@ -4,6 +4,10 @@ struct LeadDetailView: View {
     let leadId: Int
 
     @State private var vm: LeadDetailViewModel
+    @State private var showStatusSheet:  Bool = false
+    @State private var showAssignSheet:  Bool = false
+    @State private var showNoteSheet:    Bool = false
+    @State private var noteText:         String = ""
 
     init(leadId: Int) {
         self.leadId = leadId
@@ -23,7 +27,36 @@ struct LeadDetailView: View {
         .navigationTitle("Lead")
         .navigationBarTitleDisplayMode(.inline)
         .task { await vm.load() }
+        .task { await vm.loadTeam() }
         .refreshable { await vm.reload() }
+        .alert("Error", isPresented: .constant(vm.saveError != nil)) {
+            Button("Aceptar") { vm.saveError = nil }
+        } message: {
+            Text(vm.saveError ?? "")
+        }
+        // Estado
+        .sheet(isPresented: $showStatusSheet) {
+            LeadStatusSheet(currentStatus: vm.lead?.status ?? "") { status in
+                Task { await vm.updateStatus(status) }
+            }
+            .presentationDetents([.medium])
+        }
+        // Asignación
+        .sheet(isPresented: $showAssignSheet) {
+            LeadAssignSheet(members: vm.teamMembers) { userId in
+                Task { await vm.assign(to: userId) }
+            }
+            .presentationDetents([.medium])
+        }
+        // Nota
+        .sheet(isPresented: $showNoteSheet) {
+            LeadNoteSheet(noteText: $noteText) {
+                let text = noteText
+                noteText = ""
+                Task { await vm.addNote(text) }
+            }
+            .presentationDetents([.medium])
+        }
     }
 
     // MARK: - Content
@@ -230,41 +263,39 @@ struct LeadDetailView: View {
         }
     }
 
-    // MARK: - Actions (MB-PRO-2)
+    // MARK: - Actions
 
     private var actionsSection: some View {
-        Section {
+        Section("Acciones") {
             Button {
-                // MB-PRO-2: PATCH /leads/{id} — cambiar estado
+                showStatusSheet = true
             } label: {
-                Label("Actualizar estado", systemImage: "arrow.triangle.2.circlepath")
-                    .foregroundStyle(Color.maresmeBlue)
+                HStack {
+                    Label("Actualizar estado", systemImage: "arrow.triangle.2.circlepath")
+                        .foregroundStyle(Color.maresmeBlue)
+                    Spacer()
+                    if vm.isSaving {
+                        ProgressView().scaleEffect(0.8)
+                    }
+                }
             }
-            .disabled(true)
-            .opacity(0.5)
+            .disabled(vm.isSaving)
 
             Button {
-                // MB-PRO-2: POST /leads/{id}/assign
+                showAssignSheet = true
             } label: {
                 Label("Asignar a agente", systemImage: "person.badge.plus")
                     .foregroundStyle(Color.maresmeBlue)
             }
-            .disabled(true)
-            .opacity(0.5)
+            .disabled(vm.isSaving)
 
             Button {
-                // MB-PRO-2: POST /leads/{id}/notes
+                showNoteSheet = true
             } label: {
                 Label("Añadir nota", systemImage: "note.text.badge.plus")
                     .foregroundStyle(Color.maresmeBlue)
             }
-            .disabled(true)
-            .opacity(0.5)
-        } header: {
-            Text("Acciones")
-        } footer: {
-            Text("Las acciones estarán disponibles en la próxima versión.")
-                .font(.maresmeCaption)
+            .disabled(vm.isSaving)
         }
     }
 
@@ -311,6 +342,148 @@ struct LeadDetailView: View {
         }
         .frame(maxWidth: .infinity)
         .background(Color.maresmeBackground)
+    }
+}
+
+// MARK: - LeadStatusSheet
+
+private struct LeadStatusSheet: View {
+    let currentStatus: String
+    let onSelect:      (String) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    private let statuses: [(String, String, String)] = [
+        ("new",       "Nuevo",       "sparkle"),
+        ("contacted", "Contactado",  "phone"),
+        ("qualified", "Cualificado", "checkmark.seal"),
+        ("converted", "Convertido",  "star.fill"),
+        ("closed",    "Cerrado",     "xmark.circle"),
+    ]
+
+    var body: some View {
+        NavigationStack {
+            List(statuses, id: \.0) { value, label, icon in
+                Button {
+                    onSelect(value)
+                    dismiss()
+                } label: {
+                    HStack {
+                        Label(label, systemImage: icon)
+                            .foregroundStyle(Color.maresmeText)
+                        Spacer()
+                        if value == currentStatus {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(Color.maresmeBlue)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Cambiar estado")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancelar") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - LeadAssignSheet
+
+private struct LeadAssignSheet: View {
+    let members:  [AgencyTeamMember]
+    let onSelect: (Int) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if members.isEmpty {
+                    VStack(spacing: 16) {
+                        Spacer()
+                        Image(systemName: "person.3")
+                            .font(.system(size: 36))
+                            .foregroundStyle(Color.maresmeSubtext)
+                        Text("Sin miembros disponibles")
+                            .font(.maresmeBodySm)
+                            .foregroundStyle(Color.maresmeSubtext)
+                        Spacer()
+                    }
+                } else {
+                    List(members) { member in
+                        Button {
+                            onSelect(member.id)
+                            dismiss()
+                        } label: {
+                            HStack(spacing: 12) {
+                                ZStack {
+                                    Circle()
+                                        .fill(Color.maresmeBlue.opacity(0.1))
+                                        .frame(width: 36, height: 36)
+                                    Text(member.initials)
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(Color.maresmeBlue)
+                                }
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(member.name)
+                                        .font(.maresmeBodySm)
+                                        .foregroundStyle(Color.maresmeText)
+                                    Text(member.roleLabel)
+                                        .font(.maresmeCaption)
+                                        .foregroundStyle(Color.maresmeSubtext)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Asignar a")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancelar") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - LeadNoteSheet
+
+private struct LeadNoteSheet: View {
+    @Binding var noteText: String
+    let onSave: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 12) {
+                TextEditor(text: $noteText)
+                    .font(.maresmeBodySm)
+                    .focused($focused)
+                    .frame(maxHeight: .infinity)
+                    .padding(4)
+            }
+            .padding()
+            .navigationTitle("Nueva nota")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancelar") { dismiss() }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Guardar") {
+                        onSave()
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(noteText.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+            .onAppear { focused = true }
+        }
     }
 }
 

@@ -4,6 +4,7 @@ struct AgencyPropertyDetailView: View {
     let slug: String
 
     @State private var vm: AgencyPropertyDetailViewModel
+    @State private var actionToConfirm: AgencyPropertyDetail.PropertyAction? = nil
 
     init(slug: String) {
         self.slug = slug
@@ -22,8 +23,50 @@ struct AgencyPropertyDetailView: View {
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if let p = vm.property {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    NavigationLink {
+                        AgencyPropertyEditView(property: p) { updated in
+                            vm.applyUpdate(updated)
+                        }
+                    } label: {
+                        Image(systemName: "pencil")
+                    }
+                }
+            }
+        }
         .task { await vm.load() }
         .refreshable { await vm.reload() }
+        .alert("Error", isPresented: .constant(vm.actionError != nil)) {
+            Button("Aceptar") { vm.actionError = nil }
+        } message: {
+            Text(vm.actionError ?? "")
+        }
+        .confirmationDialog(
+            confirmationTitle,
+            isPresented: .constant(actionToConfirm != nil),
+            titleVisibility: .visible
+        ) {
+            if let action = actionToConfirm {
+                Button(action.rawValue, role: action == .sell ? .destructive : .none) {
+                    actionToConfirm = nil
+                    Task { await vm.perform(action) }
+                }
+                Button("Cancelar", role: .cancel) { actionToConfirm = nil }
+            }
+        }
+    }
+
+    private var confirmationTitle: String {
+        guard let action = actionToConfirm else { return "" }
+        switch action {
+        case .publish:    return "¿Publicar la propiedad?"
+        case .unpublish:  return "¿Retirar la propiedad del mercado?"
+        case .reserve:    return "¿Marcar como reservada?"
+        case .reactivate: return "¿Reactivar la propiedad?"
+        case .sell:       return "¿Marcar como vendida?"
+        }
     }
 
     // MARK: - Main content
@@ -39,9 +82,7 @@ struct AgencyPropertyDetailView: View {
                     if let desc = p.description, !desc.isEmpty {
                         descriptionSection(desc)
                     }
-                    if !p.photos.isEmpty {
-                        photosSection(p.photos)
-                    }
+                    photosManagementSection(p)
                     leadsSection(p)
                     metaSection(p)
                 }
@@ -88,7 +129,7 @@ struct AgencyPropertyDetailView: View {
         .frame(height: 260)
     }
 
-    // MARK: - Header (título + precio + estado)
+    // MARK: - Header
 
     private func headerSection(_ p: AgencyPropertyDetail) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -121,7 +162,7 @@ struct AgencyPropertyDetailView: View {
         }
     }
 
-    // MARK: - Actions (slots para MB-PRO-2)
+    // MARK: - Actions
 
     private func actionsSection(_ p: AgencyPropertyDetail) -> some View {
         let actions = p.availableActions
@@ -144,12 +185,19 @@ struct AgencyPropertyDetailView: View {
             .padding(16)
             .background(Color.maresmeSurface)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                if vm.isPerformingAction {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.maresmeBackground.opacity(0.6))
+                    ProgressView()
+                }
+            }
         )
     }
 
     private func actionButton(_ action: AgencyPropertyDetail.PropertyAction) -> some View {
         Button {
-            // MB-PRO-2: implementar acción PATCH /status
+            actionToConfirm = action
         } label: {
             Label(action.rawValue, systemImage: action.icon)
                 .font(.maresmeLabelSm)
@@ -159,8 +207,7 @@ struct AgencyPropertyDetailView: View {
                 .background(Color.maresmeBlue.opacity(0.08))
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
-        .disabled(true) // MB-PRO-2
-        .opacity(0.6)
+        .disabled(vm.isPerformingAction)
     }
 
     // MARK: - Key specs
@@ -180,6 +227,9 @@ struct AgencyPropertyDetailView: View {
                 }
                 if let surface = p.surfaceM2 {
                     specCell(value: "\(surface) m²", label: "Superficie", icon: "ruler")
+                }
+                if let useful = p.usefulSurfaceM2 {
+                    specCell(value: "\(useful) m²", label: "Sup. útil", icon: "square.dashed")
                 }
                 specCell(value: p.typeLabel, label: "Tipo", icon: "tag")
                 if let score = p.healthScore {
@@ -232,39 +282,44 @@ struct AgencyPropertyDetailView: View {
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
-    // MARK: - Photos gallery
+    // MARK: - Photos management
 
-    private func photosSection(_ photos: [AgencyPropertyPhoto]) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Fotos (\(photos.count))")
-                .font(.maresmeLabel)
-                .foregroundStyle(Color.maresmeText)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(photos) { photo in
-                        if let url = URL(string: photo.url) {
-                            AsyncImage(url: url) { phase in
-                                switch phase {
-                                case .success(let img):
-                                    img.resizable()
-                                        .scaledToFill()
-                                        .frame(width: 120, height: 90)
-                                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                                default:
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .fill(Color.maresmeBlue.opacity(0.08))
-                                        .frame(width: 120, height: 90)
-                                }
-                            }
-                        }
-                    }
-                }
+    private func photosManagementSection(_ p: AgencyPropertyDetail) -> some View {
+        NavigationLink {
+            AgencyPropertyPhotosView(slug: p.slug, photos: p.photos) {
+                Task { await vm.reload() }
             }
+        } label: {
+            HStack(spacing: 14) {
+                ZStack {
+                    Circle()
+                        .fill(Color.maresmeSea.opacity(0.1))
+                        .frame(width: 44, height: 44)
+                    Image(systemName: "photo.stack")
+                        .font(.system(size: 20))
+                        .foregroundStyle(Color.maresmeSea)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Gestionar fotos")
+                        .font(.maresmeLabel)
+                        .foregroundStyle(Color.maresmeText)
+                    Text("\(p.photos.count) foto\(p.photos.count == 1 ? "" : "s") · Subir, eliminar y ordenar")
+                        .font(.maresmeCaption)
+                        .foregroundStyle(Color.maresmeSubtext)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.maresmeDisabled)
+            }
+            .padding(16)
+            .background(Color.maresmeSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
+        .buttonStyle(.plain)
     }
 
-    // MARK: - Leads section (tappable en MB-PRO-2)
+    // MARK: - Leads section
 
     private func leadsSection(_ p: AgencyPropertyDetail) -> some View {
         NavigationLink {

@@ -22,9 +22,25 @@ struct AgencyPropertyDetail: Decodable, Identifiable {
     let priceType: String?
 
     // Superficie y características
-    let surfaceM2: Int?
-    let rooms:     Int?
-    let bathrooms: Int?
+    let surfaceM2:       Int?
+    let usefulSurfaceM2: Int?
+    let rooms:           Int?
+    let bathrooms:       Int?
+    let floorNumber:     Int?
+
+    // Extras
+    let hasElevator:    Bool?
+    let hasTerrace:     Bool?
+    let hasParking:     Bool?
+    let hasPool:        Bool?
+    let hasStorageRoom: Bool?
+    let hasGarden:      Bool?
+    let hasSeaView:     Bool?
+
+    // Clasificación
+    let isNewBuild:  Bool?
+    let isExclusive: Bool?
+    let isFeatured:  Bool?
 
     // Ubicación
     let municipality: String?
