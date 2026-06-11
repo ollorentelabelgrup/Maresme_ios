@@ -26,6 +26,9 @@ struct AgencyPropertyEditView: View {
 
     var body: some View {
         Form {
+            if let hint = vm.validationError {
+                validationHintSection(hint)
+            }
             basicInfoSection
             locationSection
             characteristicsSection
@@ -36,7 +39,7 @@ struct AgencyPropertyEditView: View {
         .navigationTitle(vm.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(vm.isSaving)
-        .toolbar { saveToolbarItem }
+        .toolbar { toolbarItems }
         .task { await vm.loadZones() }
         .sheet(isPresented: $showMapPicker) {
             NavigationStack {
@@ -54,8 +57,14 @@ struct AgencyPropertyEditView: View {
         .onChange(of: photosPickerItems) { _, items in
             Task { await loadSelectedPhotos(items) }
         }
-        .alert("Error al guardar", isPresented: .constant(vm.saveError != nil)) {
-            Button("Aceptar") { vm.saveError = nil }
+        // Alert con Binding correcto (no .constant): permite dismiss real
+        .alert("Error al guardar", isPresented: Binding(
+            get: { vm.showSaveAlert },
+            set: { vm.showSaveAlert = $0 }
+        )) {
+            Button("Aceptar", role: .cancel) {
+                vm.showSaveAlert = false
+            }
         } message: {
             Text(vm.saveError ?? "")
         }
@@ -64,7 +73,16 @@ struct AgencyPropertyEditView: View {
     // MARK: - Toolbar
 
     @ToolbarContentBuilder
-    private var saveToolbarItem: some ToolbarContent {
+    private var toolbarItems: some ToolbarContent {
+        // Cancelar (izquierda)
+        ToolbarItem(placement: .navigationBarLeading) {
+            if !vm.isSaving {
+                Button("Cancelar") { dismiss() }
+                    .foregroundStyle(Color.maresmeSubtext)
+            }
+        }
+
+        // Guardar borrador / Publicar (derecha)
         ToolbarItem(placement: .navigationBarTrailing) {
             if vm.isSaving || vm.isUploadingPhotos {
                 HStack(spacing: 6) {
@@ -75,12 +93,42 @@ struct AgencyPropertyEditView: View {
                             .foregroundStyle(Color.maresmeSubtext)
                     }
                 }
+            } else if vm.isCreateMode {
+                Menu {
+                    Button {
+                        performSave(publish: false)
+                    } label: {
+                        Label("Guardar borrador", systemImage: "clock")
+                    }
+
+                    Button {
+                        performSave(publish: true)
+                    } label: {
+                        Label("Publicar ahora", systemImage: "checkmark.circle")
+                    }
+                } label: {
+                    Text("Guardar")
+                        .fontWeight(.semibold)
+                        .foregroundStyle(vm.validationError == nil ? Color.maresmeBlue : Color.maresmeSubtext)
+                }
+                .disabled(vm.validationError != nil)
             } else {
-                Button("Guardar") { saveProperty() }
+                Button("Guardar") { performSave(publish: false) }
                     .fontWeight(.semibold)
                     .disabled(vm.validationError != nil)
             }
         }
+    }
+
+    // MARK: - Validation hint (visible en lugar de botón desactivado mudo)
+
+    private func validationHintSection(_ hint: String) -> some View {
+        Section {
+            Label(hint, systemImage: "exclamationmark.triangle.fill")
+                .font(.subheadline)
+                .foregroundStyle(Color.maresmeWarning)
+        }
+        .listRowBackground(Color.maresmeWarning.opacity(0.08))
     }
 
     // MARK: - Sección 1: Información básica
@@ -117,13 +165,20 @@ struct AgencyPropertyEditView: View {
                 } else if !vm.zones.isEmpty {
                     LabeledContent(vm.isCreateMode ? "Municipio *" : "Municipio") {
                         Picker("Municipio", selection: $vm.selectedZoneId) {
-                            Text("Seleccionar…").tag(Optional<Int>.none)
+                            Text("Seleccionar municipio…").tag(Optional<Int>.none)
                             ForEach(vm.zones) { zone in
                                 Text(zone.name).tag(Optional(zone.id))
                             }
                         }
                         .pickerStyle(.menu)
                         .labelsHidden()
+                    }
+                } else {
+                    // Fallo de carga: permite reintentar
+                    LabeledContent(vm.isCreateMode ? "Municipio *" : "Municipio") {
+                        Button("Reintentar") { Task { await vm.reloadZones() } }
+                            .font(.maresmeCaption)
+                            .foregroundStyle(Color.maresmeBlue)
                     }
                 }
                 fieldError("zone_id")
@@ -167,7 +222,7 @@ struct AgencyPropertyEditView: View {
                 HStack {
                     Image(systemName: vm.lat != nil ? "mappin.circle.fill" : "mappin.circle")
                         .foregroundStyle(vm.lat != nil ? Color.maresmeSuccess : Color.maresmeBlue)
-                    Text(vm.lat != nil ? "Ubicación seleccionada" : "Seleccionar en el mapa")
+                    Text(vm.lat != nil ? "Ubicación confirmada" : "Seleccionar en el mapa")
                         .foregroundStyle(vm.lat != nil ? Color.maresmeSuccess : Color.maresmeBlue)
                     Spacer()
                     if let lat = vm.lat, let lng = vm.lng {
@@ -216,7 +271,7 @@ struct AgencyPropertyEditView: View {
         }
     }
 
-    // MARK: - Sección 6: Fotos (solo en creación)
+    // MARK: - Sección 6: Fotos (solo creación)
 
     private var photosSection: some View {
         Section("Fotos") {
@@ -282,14 +337,19 @@ struct AgencyPropertyEditView: View {
         }
     }
 
-    private func saveProperty() {
+    private func performSave(publish: Bool) {
         Task {
             do {
-                let saved = try await vm.save()
+                let saved: AgencyPropertyDetail
+                if publish {
+                    saved = try await vm.saveAndPublish()
+                } else {
+                    saved = try await vm.save()
+                }
                 onSaved(saved)
                 dismiss()
             } catch {
-                // Error expuesto mediante vm.saveError y vm.fieldErrors
+                // Error expuesto mediante vm.showSaveAlert + vm.fieldErrors
             }
         }
     }
@@ -301,7 +361,6 @@ struct AgencyPropertyEditView: View {
                   let image = UIImage(data: data) else { continue }
             vm.addPendingPhoto(image)
         }
-        // Reset para permitir añadir más fotos en sucesivas selecciones
         photosPickerItems = []
     }
 

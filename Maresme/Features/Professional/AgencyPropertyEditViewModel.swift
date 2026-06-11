@@ -51,11 +51,13 @@ final class AgencyPropertyEditViewModel {
 
     // MARK: - Estado UI
 
-    var isSaving:       Bool              = false
-    var saveError:      String?           = nil
-    var fieldErrors:    [String: String]  = [:]
-    var zones:          [ZoneModel]       = []
-    var isLoadingZones: Bool              = false
+    var isSaving:         Bool              = false
+    var saveError:        String?           = nil
+    var showSaveAlert:    Bool              = false
+    var fieldErrors:      [String: String]  = [:]
+    var zones:            [ZoneModel]       = []
+    var isLoadingZones:   Bool              = false
+    var publishedAfterSave: Bool            = false
 
     // MARK: - Privado
 
@@ -104,6 +106,24 @@ final class AgencyPropertyEditViewModel {
         }
     }
 
+    // MARK: - Guardar + Publicar
+
+    // Crea la propiedad (draft) y después la publica directamente.
+    // Si el paso de publicación falla, devuelve el borrador creado (sin re-throw).
+    func saveAndPublish() async throws -> AgencyPropertyDetail {
+        let saved = try await save()
+        publishedAfterSave = false
+        do {
+            let published = try await writeService.publish(slug: saved.slug)
+            publishedAfterSave = true
+            return published
+        } catch {
+            // La propiedad se creó como borrador pero no se pudo publicar.
+            // Devolvemos el borrador sin propagar el error de publicación.
+            return saved
+        }
+    }
+
     // MARK: - Fotos
 
     func addPendingPhoto(_ image: UIImage) {
@@ -128,6 +148,16 @@ final class AgencyPropertyEditViewModel {
 
     func loadZones() async {
         guard zones.isEmpty, !isLoadingZones else { return }
+        await fetchZones()
+    }
+
+    func reloadZones() async {
+        guard !isLoadingZones else { return }
+        zones = []
+        await fetchZones()
+    }
+
+    private func fetchZones() async {
         isLoadingZones = true
         if let result = try? await APIClient.shared.request(
             Endpoint(.get, "/zones")
@@ -174,11 +204,12 @@ final class AgencyPropertyEditViewModel {
 
     private func handleAPIError(_ error: Error) {
         guard let apiError = error as? APIError else {
-            saveError = error.localizedDescription
+            saveError     = error.localizedDescription
+            showSaveAlert = true
             return
         }
-        saveError = apiError.localizedDescription
-        // Poblar errores por campo con el primer mensaje de cada clave
+        saveError     = apiError.localizedDescription
+        showSaveAlert = true
         for (field, messages) in apiError.validationErrors {
             fieldErrors[field] = messages.first
         }

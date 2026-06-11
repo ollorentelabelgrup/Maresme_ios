@@ -133,11 +133,24 @@ actor APIClient {
     }
 
     private func performRequest(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        #if DEBUG
+        print("[API] → \(request.httpMethod ?? "?") \(request.url?.absoluteString ?? "?")")
+        if let body = request.httpBody, let str = String(data: body, encoding: .utf8) {
+            print("[API] Body: \(str)")
+        }
+        #endif
+
         do {
             let (data, response) = try await session.data(for: request)
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw APIError.unknown
             }
+            #if DEBUG
+            print("[API] ← \(httpResponse.statusCode) (\(request.url?.lastPathComponent ?? "?"))")
+            if let str = String(data: data, encoding: .utf8) {
+                print("[API] Response: \(str.prefix(1000))")
+            }
+            #endif
             return (data, httpResponse)
         } catch let error as APIError {
             throw error
