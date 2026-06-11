@@ -1,5 +1,10 @@
 import Foundation
 
+// Sin CodingKeys explícitos: el decoder usa keyDecodingStrategy = .convertFromSnakeCase
+// para mapear "photo_url" → photoUrl, "has_beach" → hasBeach, etc.
+// CodingKeys con raw values snake_case ROMPEN convertFromSnakeCase (gotcha documentado
+// en CLAUDE.md §3): el decoder convierte el JSON key a camelCase y luego compara con el
+// raw value — "photo_url" convertido es "photoUrl" ≠ raw value "photo_url" → keyNotFound.
 struct ZoneModel: Decodable, Identifiable {
     let id:                    Int
     let slug:                  String
@@ -15,16 +20,4 @@ struct ZoneModel: Decodable, Identifiable {
     let averagePriceM2:        Int?
     let propertiesCount:       Int
     let isFeatured:            Bool
-
-    enum CodingKeys: String, CodingKey {
-        case id, slug, name, type, tagline, population
-        case photoUrl            = "photo_url"
-        case hasBeach            = "has_beach"
-        case hasMountain         = "has_mountain"
-        case distanceBarcelonaKm = "distance_barcelona_km"
-        case averagePrice        = "average_price"
-        case averagePriceM2      = "average_price_m2"
-        case propertiesCount     = "properties_count"
-        case isFeatured          = "is_featured"
-    }
 }

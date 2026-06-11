@@ -159,10 +159,15 @@ final class AgencyPropertyEditViewModel {
 
     private func fetchZones() async {
         isLoadingZones = true
-        if let result = try? await APIClient.shared.request(
-            Endpoint(.get, "/zones")
-        ) as WrappedResponse<[ZoneModel]> {
+        do {
+            let result: WrappedResponse<[ZoneModel]> = try await APIClient.shared.request(
+                Endpoint(.get, "/zones")
+            )
+            print("[Zones] decoded:", result.data.count)
             zones = result.data
+            print("[Zones] viewModel:", self.zones.count)
+        } catch {
+            print("[Zones] ❌ fetchZones error:", error)
         }
         isLoadingZones = false
     }

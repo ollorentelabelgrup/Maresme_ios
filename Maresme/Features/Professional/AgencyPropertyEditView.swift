@@ -163,6 +163,7 @@ struct AgencyPropertyEditView: View {
                         ProgressView().scaleEffect(0.7)
                     }
                 } else if !vm.zones.isEmpty {
+                    let _ = { print("[Zones] render:", vm.zones.count) }()
                     LabeledContent(vm.isCreateMode ? "Municipio *" : "Municipio") {
                         Picker("Municipio", selection: $vm.selectedZoneId) {
                             Text("Seleccionar municipio…").tag(Optional<Int>.none)
