@@ -3,7 +3,16 @@ import Observation
 
 @Observable
 final class AgencyPropertyEditViewModel {
-    // Campos del formulario
+
+    // MARK: - Mode
+
+    enum Mode {
+        case create
+        case edit(slug: String)
+    }
+
+    // MARK: - Form fields
+
     var title:        String = ""
     var description:  String = ""
     var type:         String = "piso"
@@ -33,22 +42,34 @@ final class AgencyPropertyEditViewModel {
     var isExclusive: Bool = false
     var isFeatured:  Bool = false
 
-    // Estado UI
+    // MARK: - UI state
+
     var isSaving:     Bool    = false
     var saveError:    String? = nil
     var zones:        [ZoneModel] = []
     var isLoadingZones: Bool = false
 
-    private let property:     AgencyPropertyDetail
+    // MARK: - Private
+
+    private let mode:         Mode
     private let writeService: AgencyPropertyWriteService
+
+    // MARK: - Init (edit)
 
     init(
         property: AgencyPropertyDetail,
         writeService: AgencyPropertyWriteService = AgencyPropertyWriteService()
     ) {
-        self.property     = property
+        self.mode         = .edit(slug: property.slug)
         self.writeService = writeService
         populateFields(from: property)
+    }
+
+    // MARK: - Init (create)
+
+    init(writeService: AgencyPropertyWriteService = AgencyPropertyWriteService()) {
+        self.mode         = .create
+        self.writeService = writeService
     }
 
     // MARK: - Save
@@ -59,8 +80,12 @@ final class AgencyPropertyEditViewModel {
         defer { isSaving = false }
         let payload = buildPayload()
         do {
-            let updated = try await writeService.update(slug: property.slug, payload: payload)
-            return updated
+            switch mode {
+            case .create:
+                return try await writeService.create(payload: payload)
+            case .edit(let slug):
+                return try await writeService.update(slug: slug, payload: payload)
+            }
         } catch let error as APIError {
             saveError = error.localizedDescription
             throw error
@@ -75,7 +100,6 @@ final class AgencyPropertyEditViewModel {
     func loadZones() async {
         guard zones.isEmpty, !isLoadingZones else { return }
         isLoadingZones = true
-        // Public endpoint — no auth needed, but APIClient adds token if available
         if let result = try? await APIClient.shared.request(
             Endpoint(.get, "/zones")
         ) as WrappedResponse<[ZoneModel]> {
@@ -90,6 +114,11 @@ final class AgencyPropertyEditViewModel {
         if title.trimmingCharacters(in: .whitespaces).isEmpty {
             return "El título es obligatorio."
         }
+        let hasSalePrice = !priceSaleStr.trimmingCharacters(in: .whitespaces).isEmpty
+        let hasRentPrice = !priceRentStr.trimmingCharacters(in: .whitespaces).isEmpty
+        if case .create = mode, !hasSalePrice && !hasRentPrice {
+            return "Indica al menos un precio de venta o alquiler."
+        }
         if let price = Int(priceSaleStr), price <= 0 {
             return "El precio de venta debe ser mayor que 0."
         }
@@ -97,6 +126,13 @@ final class AgencyPropertyEditViewModel {
             return "La superficie debe ser mayor que 0."
         }
         return nil
+    }
+
+    var navigationTitle: String {
+        switch mode {
+        case .create: return "Nueva propiedad"
+        case .edit:   return "Editar propiedad"
+        }
     }
 
     // MARK: - Private

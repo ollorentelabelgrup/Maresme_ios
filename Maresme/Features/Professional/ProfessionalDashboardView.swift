@@ -1,10 +1,12 @@
 import SwiftUI
+import Charts
 
 struct ProfessionalDashboardView: View {
     @Environment(SessionManager.self) private var session
     @Environment(\.openURL)           private var openURL
 
     @State private var vm = ProfessionalDashboardViewModel()
+    @State private var showCreateProperty = false
 
     var body: some View {
         List {
@@ -15,6 +17,14 @@ struct ProfessionalDashboardView: View {
             statsSection
 
             quickActionsSection
+
+            if vm.trends != nil {
+                trendsSection
+            }
+
+            if !vm.recentActivity.isEmpty {
+                recentActivitySection
+            }
 
             if let agency = session.currentAgency {
                 agencyContactSection(agency)
@@ -27,6 +37,13 @@ struct ProfessionalDashboardView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await vm.load() }
         .refreshable { await vm.reload() }
+        .sheet(isPresented: $showCreateProperty) {
+            NavigationStack {
+                AgencyPropertyEditView(onCreated: { _ in
+                    Task { await vm.reload() }
+                })
+            }
+        }
     }
 
     // MARK: - Agency header
@@ -91,30 +108,22 @@ struct ProfessionalDashboardView: View {
             columns: [GridItem(.flexible()), GridItem(.flexible())],
             spacing: 12
         ) {
-            statCard(
-                value:    vm.stats?.activeProperties ?? 0,
-                label:    "Activas",
-                icon:     "house.fill",
-                color:    .maresmeSuccess
-            )
-            statCard(
-                value:    vm.stats?.pendingProperties ?? 0,
-                label:    "Borrador",
-                icon:     "clock.fill",
-                color:    .maresmeSubtext
-            )
-            statCard(
-                value:    vm.stats?.newLeads ?? 0,
-                label:    "Leads nuevos",
-                icon:     "person.crop.circle.badge.plus",
-                color:    .maresmeBlue
-            )
-            statCard(
-                value:    vm.stats?.pendingLeads ?? 0,
-                label:    "Leads pendientes",
-                icon:     "person.badge.clock",
-                color:    .maresmeWarning
-            )
+            statCard(value: vm.stats?.activeProperties  ?? 0, label: "Activas",
+                     icon: "house.fill",                      color: .maresmeSuccess)
+            statCard(value: vm.stats?.pendingProperties ?? 0, label: "Borrador",
+                     icon: "clock.fill",                      color: .maresmeSubtext)
+            statCard(value: vm.stats?.reservedProperties ?? 0, label: "Reservadas",
+                     icon: "lock.fill",                        color: .maresmeWarning)
+            statCard(value: vm.stats?.soldProperties    ?? 0, label: "Vendidas",
+                     icon: "checkmark.seal.fill",              color: .maresmeSea)
+            statCard(value: vm.stats?.newLeads          ?? 0, label: "Leads nuevos",
+                     icon: "person.crop.circle.badge.plus",    color: .maresmeBlue)
+            statCard(value: vm.stats?.pendingLeads      ?? 0, label: "Leads pendientes",
+                     icon: "person.badge.clock",               color: .maresmeWarning)
+            statCard(value: vm.stats?.convertedLeads    ?? 0, label: "Leads cerrados",
+                     icon: "person.fill.checkmark",            color: .maresmeSuccess)
+            statCard(value: vm.stats?.monthlyViews      ?? 0, label: "Visitas mes",
+                     icon: "eye",                              color: .maresmeBlue)
         }
         .padding(.horizontal, 4)
         .padding(.vertical, 8)
@@ -147,6 +156,14 @@ struct ProfessionalDashboardView: View {
 
     private var quickActionsSection: some View {
         Section("Panel de gestión") {
+            Button {
+                showCreateProperty = true
+            } label: {
+                Label("Nueva propiedad", systemImage: "plus.circle.fill")
+                    .foregroundStyle(Color.maresmeBlue)
+                    .fontWeight(.semibold)
+            }
+
             NavigationLink {
                 MyPropertiesView()
             } label: {
@@ -186,6 +203,89 @@ struct ProfessionalDashboardView: View {
                 TeamView()
             } label: {
                 Label("Equipo", systemImage: "person.3")
+            }
+        }
+    }
+
+    // MARK: - Trends charts
+
+    @ViewBuilder
+    private var trendsSection: some View {
+        if let trends = vm.trends {
+            Section("Tendencias (30 días)") {
+                VStack(alignment: .leading, spacing: 16) {
+                    trendChart(
+                        points:  trends.leadsCreated,
+                        label:   "Leads recibidos",
+                        color:   .maresmeBlue
+                    )
+                    Divider()
+                    trendChart(
+                        points:  trends.views,
+                        label:   "Visitas a propiedades",
+                        color:   .maresmeSea
+                    )
+                    Divider()
+                    trendChart(
+                        points:  trends.propertiesCreated,
+                        label:   "Propiedades creadas",
+                        color:   .maresmeSuccess
+                    )
+                }
+                .padding(.vertical, 8)
+                .listRowBackground(Color.maresmeBackground)
+                .listRowInsets(EdgeInsets())
+            }
+        }
+    }
+
+    private func trendChart(points: [TrendPoint], label: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(label)
+                .font(.maresmeLabelSm)
+                .foregroundStyle(Color.maresmeSubtext)
+
+            Chart(points) { point in
+                AreaMark(
+                    x: .value("Fecha", point.date),
+                    y: .value("Total", point.count)
+                )
+                .foregroundStyle(color.opacity(0.15))
+
+                LineMark(
+                    x: .value("Fecha", point.date),
+                    y: .value("Total", point.count)
+                )
+                .foregroundStyle(color)
+                .lineStyle(StrokeStyle(lineWidth: 2))
+            }
+            .chartXAxis(.hidden)
+            .chartYAxis {
+                AxisMarks(position: .trailing, values: .automatic(desiredCount: 3))
+            }
+            .frame(height: 80)
+        }
+        .padding(.horizontal, 16)
+    }
+
+    // MARK: - Recent activity
+
+    private var recentActivitySection: some View {
+        Section {
+            ForEach(vm.recentActivity) { activity in
+                NavigationLink {
+                    ActivityView()
+                } label: {
+                    ActivityRowView(activity: activity)
+                }
+            }
+        } header: {
+            HStack {
+                Text("Actividad reciente")
+                Spacer()
+                NavigationLink("Ver todo") { ActivityView() }
+                    .font(.maresmeCaption)
+                    .foregroundStyle(Color.maresmeBlue)
             }
         }
     }

@@ -59,6 +59,14 @@ struct AgencyPropertyWriteService {
         self.client = client
     }
 
+    // POST /api/v1/agency/properties
+    func create(payload: UpdatePropertyPayload) async throws -> AgencyPropertyDetail {
+        let wrapped: WrappedResponse<AgencyPropertyDetail> = try await client.request(
+            Endpoint(.post, "/agency/properties", body: payload)
+        )
+        return wrapped.data
+    }
+
     // PATCH /api/v1/agency/properties/{slug}
     func update(slug: String, payload: UpdatePropertyPayload) async throws -> AgencyPropertyDetail {
         let wrapped: WrappedResponse<AgencyPropertyDetail> = try await client.request(

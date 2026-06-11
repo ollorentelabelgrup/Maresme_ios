@@ -6,9 +6,16 @@ struct AgencyPropertyEditView: View {
 
     private let onSaved: (AgencyPropertyDetail) -> Void
 
+    // Edit mode
     init(property: AgencyPropertyDetail, onSaved: @escaping (AgencyPropertyDetail) -> Void) {
         self._vm     = State(initialValue: AgencyPropertyEditViewModel(property: property))
         self.onSaved = onSaved
+    }
+
+    // Create mode
+    init(onCreated: @escaping (AgencyPropertyDetail) -> Void) {
+        self._vm     = State(initialValue: AgencyPropertyEditViewModel())
+        self.onSaved = onCreated
     }
 
     var body: some View {
@@ -20,7 +27,7 @@ struct AgencyPropertyEditView: View {
             extrasSection
             classificationSection
         }
-        .navigationTitle("Editar propiedad")
+        .navigationTitle(vm.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(vm.isSaving)
         .toolbar {

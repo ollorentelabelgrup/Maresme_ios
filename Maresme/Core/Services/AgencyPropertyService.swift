@@ -43,4 +43,12 @@ struct AgencyPropertyService {
         )
         return wrapped.data
     }
+
+    // GET /api/v1/agency/stats/trends
+    func trends() async throws -> AgencyStatsTrends {
+        let wrapped: WrappedResponse<AgencyStatsTrends> = try await client.request(
+            Endpoint(.get, "/agency/stats/trends")
+        )
+        return wrapped.data
+    }
 }
