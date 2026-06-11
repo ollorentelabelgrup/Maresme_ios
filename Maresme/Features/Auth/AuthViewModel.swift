@@ -29,6 +29,9 @@ final class AuthViewModel {
         do {
             let response = try await authService.login(email: email, password: password)
             session.signIn(token: response.accessToken, user: response.user)
+            if let me = try? await authService.me() {
+                session.restoreSession(from: me)
+            }
         } catch let error as APIError {
             handleError(error)
         } catch {
@@ -50,6 +53,9 @@ final class AuthViewModel {
                 confirmation: passwordConfirmation
             )
             session.signIn(token: response.accessToken, user: response.user)
+            if let me = try? await authService.me() {
+                session.restoreSession(from: me)
+            }
         } catch let error as APIError {
             handleError(error)
         } catch {

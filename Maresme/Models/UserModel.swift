@@ -12,7 +12,9 @@ struct UserModel: Decodable, Identifiable {
     let emailVerified: Bool
     let createdAt:     Date?
 
-    var isProfessional: Bool { role == "professional" || role == "agency" }
+    // Roles del backend: "user", "professional", "admin", "super_admin"
+    var isProfessional: Bool { role == "professional" }
+    var isAdmin: Bool { role == "admin" || role == "super_admin" }
 
     // No CodingKeys needed: keyDecodingStrategy = .convertFromSnakeCase in APIClient
     // automatically converts "email_verified" → emailVerified, "created_at" → createdAt, etc.

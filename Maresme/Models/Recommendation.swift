@@ -1,29 +1,59 @@
 import Foundation
 
-struct Recommendation: Decodable, Identifiable {
-    let id:       Int
-    let property: PropertyCard
+// MARK: - Lista (GET /api/v1/recommendations — cursor paginated)
+// RecommendationResource envuelve UserPropertyMatch.
+// Campos: score, quality, reason, is_new (viewed_at===null), viewed_at, property (PropertyCard)
+struct Recommendation: Decodable, Identifiable, Hashable {
     let score:    Int
-    let quality:  String
-    let isNew:    Bool
-    let breakdown: RecommendationBreakdown?
+    let quality:  String    // "excellent" | "very_high" | "high" | "medium" | "low"
+    let reason:   String?
+    let isNew:    Bool      // true = nunca abierta por el usuario
+    let viewedAt: Date?
+    let property: PropertyCard
 
-    struct RecommendationBreakdown: Decodable {
-        let priceScore:    Int?
-        let zoneScore:     Int?
-        let typeScore:     Int?
-        let surfaceScore:  Int?
+    var id: String { property.slug }
 
-        enum CodingKeys: String, CodingKey {
-            case priceScore   = "price_score"
-            case zoneScore    = "zone_score"
-            case typeScore    = "type_score"
-            case surfaceScore = "surface_score"
+    // Hashable por slug para poder usar como valor de NavigationLink
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
+    static func == (lhs: Recommendation, rhs: Recommendation) -> Bool { lhs.id == rhs.id }
+
+    // No CodingKeys — convertFromSnakeCase: is_new→isNew, viewed_at→viewedAt
+}
+
+// MARK: - Detalle (GET /api/v1/recommendations/{slug})
+// Estructura no estándar: { "data": { "matching": {...}, "property": PropertyDetailResource } }
+struct RecommendationDetail: Decodable {
+    let matching: MatchingInfo
+    let property: PropertyDetail
+
+    struct MatchingInfo: Decodable {
+        let score:     Int
+        let quality:   String
+        let reason:    String?
+        let breakdown: MatchBreakdown
+
+        struct MatchBreakdown: Decodable {
+            let municipality:  Int
+            let budget:        Int
+            let propertyType:  Int    // property_type → propertyType (convertFromSnakeCase)
+            let affinity:      Int
+            // No CodingKeys — convertFromSnakeCase maneja property_type → propertyType
         }
     }
+}
 
-    enum CodingKeys: String, CodingKey {
-        case id, property, score, quality, breakdown
-        case isNew = "is_new"
-    }
+// MARK: - Contadores (GET /api/v1/recommendations/count)
+struct RecommendationCountResponse: Decodable {
+    let count:      Int
+    let unviewed:   Int
+    let highScore:  Int     // high_score → highScore (convertFromSnakeCase)
+    // No CodingKeys
+}
+
+// MARK: - Refresh (POST /api/v1/recommendations/refresh)
+struct RecommendationRefreshResponse: Decodable {
+    let generated:  Int
+    let updated:    Int
+    let highScore:  Int     // high_score → highScore (convertFromSnakeCase)
+    // No CodingKeys
 }

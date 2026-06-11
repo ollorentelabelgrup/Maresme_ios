@@ -4,29 +4,21 @@ import Foundation
 struct AppNotification: Decodable, Identifiable {
     let id:        Int
     let type:      String
-    let title:     String
-    let body:      String
     let icon:      String?
-    let isRead:    Bool
+    let title:     String
+    let message:   String
     let metadata:  NotificationMetadata?
+    let isRead:    Bool
+    let readAt:    Date?
     let createdAt: Date?
+    // No CodingKeys — convertFromSnakeCase handles is_read→isRead, read_at→readAt,
+    // created_at→createdAt. See CLAUDE.md §3.
 
     struct NotificationMetadata: Decodable {
         let actionType:   String?
         let actionTarget: String?
         let propertySlug: String?
-
-        enum CodingKeys: String, CodingKey {
-            case actionType   = "action_type"
-            case actionTarget = "action_target"
-            case propertySlug = "property_slug"
-        }
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case id, type, title, body, icon, metadata
-        case isRead    = "is_read"
-        case createdAt = "created_at"
+        // No CodingKeys — convertFromSnakeCase handles action_type→actionType, etc.
     }
 
     var sfSymbol: String {
@@ -35,6 +27,17 @@ struct AppNotification: Decodable, Identifiable {
         case "bell":          return "bell.badge"
         case "trending_down": return "arrow.down.right"
         default:              return "info.circle"
+        }
+    }
+
+    var typeLabel: String {
+        switch type {
+        case "recommendation":  return "Recomendación"
+        case "alert_match":     return "Coincidencia"
+        case "alert_activated": return "Alerta activada"
+        case "alert_paused":    return "Alerta pausada"
+        case "price_drop":      return "Bajada de precio"
+        default:                return "Actividad"
         }
     }
 }

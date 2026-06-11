@@ -1,18 +1,21 @@
 import SwiftUI
 
+// SearchView — tab de propiedades con filtros persistentes (PropertySearchStore global).
+// El store global mantiene los filtros activos mientras el usuario navega a otras tabs.
 struct SearchView: View {
+    @Environment(PropertySearchStore.self) private var searchStore
+
     var body: some View {
         NavigationStack {
-            EmptyStateView(
-                icon:    "magnifyingglass",
-                title:   "Búsqueda",
-                message: "Próximamente en MB-7: filtros avanzados, mapa y resultados en tiempo real."
-            )
-            .navigationTitle("Buscar")
-            .navigationBarTitleDisplayMode(.large)
-            .background(Color.maresmeBackground)
+            PropertyListView()
+                .navigationTitle("Propiedades")
+                .navigationBarTitleDisplayMode(.large)
         }
     }
 }
 
-#Preview { SearchView() }
+#Preview {
+    SearchView()
+        .environment(PropertySearchStore())
+        .environment(FavoriteStore())
+}

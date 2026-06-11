@@ -1,28 +1,21 @@
 import Foundation
 
 // Named AlertModel to avoid conflict with SwiftUI.Alert
+// Maps AlertResource from backend:
+// { id, name, status, frequency, filters, matches_count,
+//   preview_matches_count, has_new_matches, created_at, last_match_at }
 struct AlertModel: Decodable, Identifiable {
-    let id:                 Int
-    let name:               String
-    let zone:               String?
-    let propertyType:       String?
-    let priceMin:           Int?
-    let priceMax:           Int?
-    let roomsMin:           Int?
-    let isActive:           Bool
-    let previewMatchesCount: Int?
-    let hasNewMatches:      Bool
-    let createdAt:          Date?
+    let id:                  Int
+    let name:                String
+    let status:              String        // "active" | "paused"
+    let frequency:           String        // "instant" | "daily" | "weekly"
+    let filters:             AlertFilters
+    let matchesCount:        Int
+    let previewMatchesCount: Int
+    let hasNewMatches:       Bool
+    let createdAt:           Date?
+    let lastMatchAt:         Date?
 
-    enum CodingKeys: String, CodingKey {
-        case id, name, zone
-        case propertyType       = "property_type"
-        case priceMin           = "price_min"
-        case priceMax           = "price_max"
-        case roomsMin           = "rooms_min"
-        case isActive           = "is_active"
-        case previewMatchesCount = "preview_matches_count"
-        case hasNewMatches      = "has_new_matches"
-        case createdAt          = "created_at"
-    }
+    var isActive: Bool { status == "active" }
+    // No CodingKeys — convertFromSnakeCase handles all snake_case→camelCase
 }

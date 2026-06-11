@@ -79,11 +79,10 @@ struct AuthService {
         try await client.requestVoid(Endpoint(.post, "/auth/logout"))
     }
 
-    // Returns the full UserModel from /me (discarding agency/counts for now)
-    func me() async throws -> UserModel {
+    func me() async throws -> MeResponse {
         let wrapped: WrappedResponse<MeResponse> = try await client.request(
             Endpoint(.get, "/me")
         )
-        return wrapped.data.user
+        return wrapped.data
     }
 }

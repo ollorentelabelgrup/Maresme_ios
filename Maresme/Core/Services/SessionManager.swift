@@ -5,9 +5,13 @@ import Observation
 final class SessionManager {
     // MARK: - State
 
-    var currentUser: UserModel?
+    var currentUser:    UserModel?
+    var currentAgency:  AgencyModel?
     var isAuthenticated = false
     var isLoading       = false
+
+    // El usuario es "profesional" si tiene membresía activa en una agencia.
+    var isProfessionalUser: Bool { currentAgency != nil }
 
     // MARK: - Init
 
@@ -23,7 +27,6 @@ final class SessionManager {
             currentUser     = user
             isAuthenticated = true
         } catch {
-            // Keychain failure — log but don't crash
             print("[SessionManager] failed to save token: \(error)")
         }
     }
@@ -31,11 +34,14 @@ final class SessionManager {
     func signOut() {
         try? KeychainService.deleteToken()
         currentUser     = nil
+        currentAgency   = nil
         isAuthenticated = false
     }
 
-    func restoreSession(user: UserModel) {
-        currentUser = user
+    // Restaura sesión con la respuesta completa de /me (user + agency).
+    func restoreSession(from response: MeResponse) {
+        currentUser   = response.user
+        currentAgency = response.agency
     }
 
     func updateUser(_ user: UserModel) {
