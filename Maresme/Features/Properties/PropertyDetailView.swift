@@ -3,6 +3,7 @@ import SwiftUI
 struct PropertyDetailView: View {
     let slug: String
     @State private var viewModel: PropertyDetailViewModel
+    @State private var selectedPhotoIndex = 0
     @Environment(FavoriteStore.self) private var favoriteStore
 
     init(slug: String) {
@@ -87,35 +88,57 @@ struct PropertyDetailView: View {
         }
     }
 
-    // MARK: - Hero image
+    // MARK: - Hero image (swipeable when photos available)
 
     @ViewBuilder
     private func heroImage(_ p: PropertyDetail) -> some View {
-        let imageUrl = (p.heroImage ?? p.mainImage).flatMap(URL.init)
         ZStack(alignment: .bottomLeading) {
-            Group {
-                if let url = imageUrl {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let img): img.resizable().scaledToFill()
-                        default:               Color.maresmeBackground
+            if !p.photos.isEmpty {
+                TabView(selection: $selectedPhotoIndex) {
+                    ForEach(p.photos.indices, id: \.self) { i in
+                        if let url = URL(string: p.photos[i]) {
+                            AsyncImage(url: url) { phase in
+                                switch phase {
+                                case .success(let img): img.resizable().scaledToFill()
+                                default: Color.maresmeBackground
+                                }
+                            }
+                            .tag(i)
+                        } else {
+                            Color.maresmeBackground.tag(i)
                         }
                     }
-                } else {
-                    ZStack {
-                        Color.maresmeBackground
-                        Image(systemName: "photo")
-                            .font(.system(size: 48))
-                            .foregroundStyle(Color.maresmeDisabled)
+                }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .frame(maxWidth: .infinity)
+                .frame(height: 280)
+                .clipped()
+            } else {
+                let imageUrl = (p.heroImage ?? p.mainImage).flatMap(URL.init)
+                Group {
+                    if let url = imageUrl {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let img): img.resizable().scaledToFill()
+                            default: Color.maresmeBackground
+                            }
+                        }
+                    } else {
+                        ZStack {
+                            Color.maresmeBackground
+                            Image(systemName: "photo")
+                                .font(.system(size: 48))
+                                .foregroundStyle(Color.maresmeDisabled)
+                        }
                     }
                 }
+                .frame(maxWidth: .infinity)
+                .frame(height: 280)
+                .clipped()
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: 280)
-            .clipped()
 
-            if p.galleryCount > 1 {
-                Text("1 / \(p.galleryCount)")
+            if p.photos.count > 1 {
+                Text("\(selectedPhotoIndex + 1) / \(p.photos.count)")
                     .font(.maresmeLabelSm)
                     .foregroundStyle(.white)
                     .padding(.horizontal, 8)
