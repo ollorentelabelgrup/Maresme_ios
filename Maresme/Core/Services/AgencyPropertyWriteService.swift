@@ -18,6 +18,7 @@ struct UpdatePropertyPayload: Encodable {
     let surfaceM2:       Int?
     let usefulSurfaceM2: Int?
     let floorNumber:     Int?
+    let referenceCode:   String?
     let hasElevator:     Bool?
     let hasTerrace:      Bool?
     let hasParking:      Bool?
@@ -37,6 +38,7 @@ struct UpdatePropertyPayload: Encodable {
         case surfaceM2       = "surface_m2"
         case usefulSurfaceM2 = "useful_surface_m2"
         case floorNumber     = "floor_number"
+        case referenceCode   = "reference_code"
         case hasElevator     = "has_elevator"
         case hasTerrace      = "has_terrace"
         case hasParking      = "has_parking"

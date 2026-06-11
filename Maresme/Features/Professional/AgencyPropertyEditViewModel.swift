@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import UIKit
 
 @Observable
 final class AgencyPropertyEditViewModel {
@@ -11,22 +12,23 @@ final class AgencyPropertyEditViewModel {
         case edit(slug: String)
     }
 
-    // MARK: - Form fields
+    // MARK: - Campos del formulario
 
-    var title:        String = ""
-    var description:  String = ""
-    var type:         String = "piso"
-    var address:      String = ""
-    var priceSaleStr: String = ""
-    var priceRentStr: String = ""
-    var roomsStr:     String = ""
-    var bathroomsStr: String = ""
-    var surfaceStr:   String = ""
-    var usefulStr:    String = ""
-    var floorStr:     String = ""
-    var latStr:       String = ""
-    var lngStr:       String = ""
-    var selectedZoneId: Int? = nil
+    var title:         String = ""
+    var description:   String = ""
+    var type:          String = "piso"
+    var referenceCode: String = ""
+    var address:       String = ""
+    var priceSaleStr:  String = ""
+    var priceRentStr:  String = ""
+    var roomsStr:      String = ""
+    var bathroomsStr:  String = ""
+    var surfaceStr:    String = ""
+    var usefulStr:     String = ""
+    var floorStr:      String = ""
+    var lat:           Double? = nil
+    var lng:           Double? = nil
+    var selectedZoneId: Int?  = nil
 
     // Extras
     var hasElevator:    Bool = false
@@ -42,19 +44,25 @@ final class AgencyPropertyEditViewModel {
     var isExclusive: Bool = false
     var isFeatured:  Bool = false
 
-    // MARK: - UI state
+    // MARK: - Fotos (solo modo creación)
 
-    var isSaving:     Bool    = false
-    var saveError:    String? = nil
-    var zones:        [ZoneModel] = []
-    var isLoadingZones: Bool = false
+    var pendingPhotos:     [UIImage] = []
+    var isUploadingPhotos: Bool      = false
 
-    // MARK: - Private
+    // MARK: - Estado UI
+
+    var isSaving:       Bool              = false
+    var saveError:      String?           = nil
+    var fieldErrors:    [String: String]  = [:]
+    var zones:          [ZoneModel]       = []
+    var isLoadingZones: Bool              = false
+
+    // MARK: - Privado
 
     private let mode:         Mode
     private let writeService: AgencyPropertyWriteService
 
-    // MARK: - Init (edit)
+    // MARK: - Init edición
 
     init(
         property: AgencyPropertyDetail,
@@ -65,37 +73,58 @@ final class AgencyPropertyEditViewModel {
         populateFields(from: property)
     }
 
-    // MARK: - Init (create)
+    // MARK: - Init creación
 
     init(writeService: AgencyPropertyWriteService = AgencyPropertyWriteService()) {
         self.mode         = .create
         self.writeService = writeService
     }
 
-    // MARK: - Save
+    // MARK: - Guardar
 
     func save() async throws -> AgencyPropertyDetail {
-        isSaving  = true
-        saveError = nil
+        isSaving    = true
+        saveError   = nil
+        fieldErrors = [:]
         defer { isSaving = false }
+
         let payload = buildPayload()
         do {
             switch mode {
             case .create:
-                return try await writeService.create(payload: payload)
+                let created = try await writeService.create(payload: payload)
+                await uploadPendingPhotos(slug: created.slug)
+                return created
             case .edit(let slug):
                 return try await writeService.update(slug: slug, payload: payload)
             }
-        } catch let error as APIError {
-            saveError = error.localizedDescription
-            throw error
         } catch {
-            saveError = error.localizedDescription
+            handleAPIError(error)
             throw error
         }
     }
 
-    // MARK: - Load zones
+    // MARK: - Fotos
+
+    func addPendingPhoto(_ image: UIImage) {
+        pendingPhotos.append(image)
+    }
+
+    func removePendingPhoto(at index: Int) {
+        guard pendingPhotos.indices.contains(index) else { return }
+        pendingPhotos.remove(at: index)
+    }
+
+    private func uploadPendingPhotos(slug: String) async {
+        guard !pendingPhotos.isEmpty else { return }
+        isUploadingPhotos = true
+        defer { isUploadingPhotos = false }
+        guard let uploaded = try? await writeService.uploadPhotos(slug: slug, images: pendingPhotos),
+              let firstId  = uploaded.first?.id else { return }
+        _ = try? await writeService.setPrimaryPhoto(propertySlug: slug, photoId: firstId)
+    }
+
+    // MARK: - Cargar municipios
 
     func loadZones() async {
         guard zones.isEmpty, !isLoadingZones else { return }
@@ -108,23 +137,24 @@ final class AgencyPropertyEditViewModel {
         isLoadingZones = false
     }
 
-    // MARK: - Validation
+    // MARK: - Validación local (bloquea el botón Guardar)
 
     var validationError: String? {
         if title.trimmingCharacters(in: .whitespaces).isEmpty {
             return "El título es obligatorio."
         }
-        let hasSalePrice = !priceSaleStr.trimmingCharacters(in: .whitespaces).isEmpty
-        let hasRentPrice = !priceRentStr.trimmingCharacters(in: .whitespaces).isEmpty
-        if case .create = mode, !hasSalePrice && !hasRentPrice {
-            return "Indica al menos un precio de venta o alquiler."
+        if case .create = mode {
+            if selectedZoneId == nil {
+                return "Debes seleccionar un municipio."
+            }
+            let hasSale = !priceSaleStr.trimmingCharacters(in: .whitespaces).isEmpty
+            let hasRent = !priceRentStr.trimmingCharacters(in: .whitespaces).isEmpty
+            if !hasSale && !hasRent {
+                return "Indica al menos un precio de venta o alquiler."
+            }
         }
-        if let price = Int(priceSaleStr), price <= 0 {
-            return "El precio de venta debe ser mayor que 0."
-        }
-        if let surface = Int(surfaceStr), surface <= 0 {
-            return "La superficie debe ser mayor que 0."
-        }
+        if let p = Int(priceSaleStr), p <= 0 { return "El precio de venta debe ser mayor que 0." }
+        if let p = Int(priceRentStr), p <= 0 { return "El precio de alquiler debe ser mayor que 0." }
         return nil
     }
 
@@ -135,22 +165,40 @@ final class AgencyPropertyEditViewModel {
         }
     }
 
-    // MARK: - Private
+    var isCreateMode: Bool {
+        if case .create = mode { return true }
+        return false
+    }
+
+    // MARK: - Privados
+
+    private func handleAPIError(_ error: Error) {
+        guard let apiError = error as? APIError else {
+            saveError = error.localizedDescription
+            return
+        }
+        saveError = apiError.localizedDescription
+        // Poblar errores por campo con el primer mensaje de cada clave
+        for (field, messages) in apiError.validationErrors {
+            fieldErrors[field] = messages.first
+        }
+    }
 
     private func populateFields(from p: AgencyPropertyDetail) {
-        title        = p.title
-        description  = p.description ?? ""
-        type         = p.type
-        address      = p.address ?? ""
-        priceSaleStr = p.priceSale.map(String.init) ?? ""
-        priceRentStr = p.priceRent.map(String.init) ?? ""
-        roomsStr     = p.rooms.map(String.init) ?? ""
-        bathroomsStr = p.bathrooms.map(String.init) ?? ""
-        surfaceStr   = p.surfaceM2.map(String.init) ?? ""
-        usefulStr    = p.usefulSurfaceM2.map(String.init) ?? ""
-        floorStr     = p.floorNumber.map(String.init) ?? ""
-        latStr       = p.lat.map { String(format: "%.6f", $0) } ?? ""
-        lngStr       = p.lng.map { String(format: "%.6f", $0) } ?? ""
+        title         = p.title
+        description   = p.description   ?? ""
+        type          = p.type
+        referenceCode = p.referenceCode ?? ""
+        address       = p.address       ?? ""
+        priceSaleStr  = p.priceSale.map(String.init) ?? ""
+        priceRentStr  = p.priceRent.map(String.init) ?? ""
+        roomsStr      = p.rooms.map(String.init)         ?? ""
+        bathroomsStr  = p.bathrooms.map(String.init)     ?? ""
+        surfaceStr    = p.surfaceM2.map(String.init)     ?? ""
+        usefulStr     = p.usefulSurfaceM2.map(String.init) ?? ""
+        floorStr      = p.floorNumber.map(String.init)   ?? ""
+        lat           = p.lat
+        lng           = p.lng
         selectedZoneId = p.zoneId
 
         hasElevator    = p.hasElevator    ?? false
@@ -173,8 +221,8 @@ final class AgencyPropertyEditViewModel {
             type:            type,
             zoneId:          selectedZoneId,
             address:         address.trimmingCharacters(in: .whitespaces).isEmpty ? nil : address,
-            lat:             Double(latStr),
-            lng:             Double(lngStr),
+            lat:             lat,
+            lng:             lng,
             priceSale:       Int(priceSaleStr),
             priceRent:       Int(priceRentStr),
             rooms:           Int(roomsStr),
@@ -182,6 +230,7 @@ final class AgencyPropertyEditViewModel {
             surfaceM2:       Int(surfaceStr),
             usefulSurfaceM2: Int(usefulStr),
             floorNumber:     Int(floorStr),
+            referenceCode:   referenceCode.trimmingCharacters(in: .whitespaces).isEmpty ? nil : referenceCode,
             hasElevator:     hasElevator,
             hasTerrace:      hasTerrace,
             hasParking:      hasParking,
