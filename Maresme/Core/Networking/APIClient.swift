@@ -26,7 +26,16 @@ actor APIClient {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest  = 30
         config.timeoutIntervalForResource = 60
-        self.session       = URLSession(configuration: config)
+        // DEBUG: ServBay expone el cert para "maresme.test", pero conectamos por IP LAN
+        // (192.168.1.40) para que funcione en simulador y dispositivo físico. DebugSSLDelegate
+        // valida el cert contra el hostname real y rechaza cualquier otro — no es "trust all".
+        #if DEBUG
+        self.session = URLSession(configuration: config,
+                                  delegate: DebugSSLDelegate(),
+                                  delegateQueue: nil)
+        #else
+        self.session = URLSession(configuration: config)
+        #endif
         self.tokenProvider = tokenProvider
 
         let dec = JSONDecoder()
@@ -222,3 +231,37 @@ struct Endpoint {
         self.encodedBody = body.flatMap { try? JSONEncoder().encode($0) }
     }
 }
+
+// MARK: - Debug SSL delegate
+
+// Solo activo en DEBUG. ServBay sirve en la IP LAN (192.168.1.40) con un cert
+// emitido para "maresme.test". Este delegate evalúa el cert contra el hostname
+// real (Config.apiDevHostname) — no acepta certs inválidos, solo resuelve el
+// mismatch IP↔hostname que ocurre en desarrollo local.
+#if DEBUG
+private final class DebugSSLDelegate: NSObject, URLSessionDelegate {
+    func urlSession(
+        _ session: URLSession,
+        didReceive challenge: URLAuthenticationChallenge,
+        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+    ) {
+        guard challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust,
+              let serverTrust = challenge.protectionSpace.serverTrust else {
+            completionHandler(.performDefaultHandling, nil)
+            return
+        }
+
+        // Evaluar el cert contra el hostname real del servidor local en lugar de la IP
+        let policies = [SecPolicyCreateSSL(true, Config.apiDevHostname as CFString)]
+        SecTrustSetPolicies(serverTrust, policies as CFTypeRef)
+
+        var error: CFError?
+        if SecTrustEvaluateWithError(serverTrust, &error) {
+            completionHandler(.useCredential, URLCredential(trust: serverTrust))
+        } else {
+            // Cert inválido incluso para el hostname real → rechazar
+            completionHandler(.cancelAuthenticationChallenge, nil)
+        }
+    }
+}
+#endif
