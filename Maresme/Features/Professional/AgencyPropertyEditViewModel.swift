@@ -136,12 +136,30 @@ final class AgencyPropertyEditViewModel {
     }
 
     private func uploadPendingPhotos(slug: String) async {
+        print("[Photos] selected: \(pendingPhotos.count)")
         guard !pendingPhotos.isEmpty else { return }
+        print("[Photos] uploading to property: \(slug)")
         isUploadingPhotos = true
         defer { isUploadingPhotos = false }
-        guard let uploaded = try? await writeService.uploadPhotos(slug: slug, images: pendingPhotos),
-              let firstId  = uploaded.first?.id else { return }
-        _ = try? await writeService.setPrimaryPhoto(propertySlug: slug, photoId: firstId)
+        do {
+            let uploaded = try await writeService.uploadPhotos(slug: slug, images: pendingPhotos)
+            print("[Photos] upload count: \(uploaded.count)")
+            print("[Photos] response: \(uploaded.map { "id:\($0.id) url:\($0.url)" })")
+            guard let firstId = uploaded.first?.id else {
+                print("[Photos] ⚠️ servidor devolvió array vacío")
+                return
+            }
+            do {
+                let withPrimary = try await writeService.setPrimaryPhoto(propertySlug: slug, photoId: firstId)
+                print("[Photos] set-primary OK — total: \(withPrimary.count)")
+            } catch {
+                print("[Photos] ⚠️ setPrimaryPhoto falló (fotos subidas, sin primaria):", error)
+            }
+        } catch {
+            print("[Photos] ❌ uploadPhotos falló:", error)
+            saveError     = "Las fotos no se pudieron subir: \((error as? APIError)?.localizedDescription ?? error.localizedDescription)"
+            showSaveAlert = true
+        }
     }
 
     // MARK: - Cargar municipios

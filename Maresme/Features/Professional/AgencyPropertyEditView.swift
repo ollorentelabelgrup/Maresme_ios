@@ -284,6 +284,7 @@ struct AgencyPropertyEditView: View {
                 Label("Seleccionar fotos", systemImage: "photo.badge.plus")
                     .foregroundStyle(Color.maresmeBlue)
             }
+            .simultaneousGesture(TapGesture().onEnded { hideKeyboard() })
 
             if !vm.pendingPhotos.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -363,6 +364,12 @@ struct AgencyPropertyEditView: View {
             vm.addPendingPhoto(image)
         }
         photosPickerItems = []
+    }
+
+    // MARK: - Helpers UI
+
+    private func hideKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 
     // MARK: - Datos estáticos
